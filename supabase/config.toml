@@ -1,0 +1,4 @@
+project_id = "zizzprdnfdwhfpcwdtbk"
+
+[functions.sketch-to-code]
+verify_jwt = false
