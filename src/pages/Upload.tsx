@@ -1,8 +1,9 @@
 import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Upload, Image, X, Loader2, Sparkles } from "lucide-react";
+import { Upload, Image, X, Loader2, Sparkles, Copy, Check, RefreshCw } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const UploadPage = () => {
   const [searchParams] = useSearchParams();
@@ -13,6 +14,8 @@ const UploadPage = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [refinementPrompt, setRefinementPrompt] = useState("");
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -43,6 +46,20 @@ const UploadPage = () => {
     setGeneratedCode(null);
   };
 
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove the data URL prefix to get just the base64
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+    });
+  };
+
   const handleGenerate = async () => {
     if (!file && !isDemo) {
       toast.error("Please upload a sketch first");
@@ -50,61 +67,95 @@ const UploadPage = () => {
     }
 
     setIsProcessing(true);
-    
-    // Simulate AI processing for demo
-    setTimeout(() => {
-      setGeneratedCode(demoGeneratedCode);
+
+    try {
+      let imageBase64: string;
+      let mimeType: string;
+
+      if (isDemo && !file) {
+        // For demo mode, use a simple placeholder sketch
+        // Generate a simple base64 encoded demo image
+        const canvas = document.createElement('canvas');
+        canvas.width = 400;
+        canvas.height = 300;
+        const ctx = canvas.getContext('2d')!;
+        
+        // Draw a simple wireframe sketch
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 400, 300);
+        ctx.strokeStyle = '#333333';
+        ctx.lineWidth = 2;
+        
+        // Header
+        ctx.strokeRect(10, 10, 380, 40);
+        ctx.fillStyle = '#333333';
+        ctx.fillRect(20, 20, 60, 20);
+        
+        // Navigation
+        ctx.fillRect(280, 20, 30, 15);
+        ctx.fillRect(320, 20, 30, 15);
+        ctx.fillRect(360, 20, 20, 15);
+        
+        // Hero section
+        ctx.strokeRect(10, 60, 380, 100);
+        ctx.fillRect(30, 80, 150, 20);
+        ctx.fillRect(30, 110, 200, 10);
+        ctx.fillRect(30, 130, 80, 20);
+        
+        // Cards
+        ctx.strokeRect(10, 170, 120, 120);
+        ctx.strokeRect(140, 170, 120, 120);
+        ctx.strokeRect(270, 170, 120, 120);
+        
+        const dataUrl = canvas.toDataURL('image/png');
+        imageBase64 = dataUrl.split(',')[1];
+        mimeType = 'image/png';
+      } else if (file) {
+        imageBase64 = await fileToBase64(file);
+        mimeType = file.type;
+      } else {
+        throw new Error("No image to process");
+      }
+
+      const { data, error } = await supabase.functions.invoke('sketch-to-code', {
+        body: { 
+          imageBase64, 
+          mimeType,
+          refinementPrompt: refinementPrompt || undefined
+        }
+      });
+
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'Failed to generate code');
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      if (data?.code) {
+        setGeneratedCode(data.code);
+        toast.success("Code generated successfully!");
+      } else {
+        throw new Error("No code returned from AI");
+      }
+    } catch (error) {
+      console.error('Generation error:', error);
+      toast.error(error instanceof Error ? error.message : "Failed to generate code");
+    } finally {
       setIsProcessing(false);
-      toast.success("Code generated successfully!");
-    }, 3000);
+    }
   };
 
-  const demoGeneratedCode = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <title>Generated UI</title>
-</head>
-<body class="bg-gray-50">
-  <nav class="bg-white shadow-sm px-6 py-4">
-    <div class="flex items-center justify-between max-w-6xl mx-auto">
-      <div class="font-bold text-xl text-purple-600">Logo</div>
-      <div class="flex gap-6">
-        <a href="#" class="text-gray-600 hover:text-purple-600">Home</a>
-        <a href="#" class="text-gray-600 hover:text-purple-600">About</a>
-        <a href="#" class="text-gray-600 hover:text-purple-600">Contact</a>
-      </div>
-    </div>
-  </nav>
-  
-  <main class="max-w-6xl mx-auto px-6 py-12">
-    <section class="text-center mb-16">
-      <h1 class="text-4xl font-bold text-gray-900 mb-4">
-        Welcome to Your Website
-      </h1>
-      <p class="text-lg text-gray-600 max-w-2xl mx-auto">
-        This is a beautiful landing page generated from your sketch.
-      </p>
-      <button class="mt-6 bg-purple-600 text-white px-8 py-3 rounded-full hover:bg-purple-700">
-        Get Started
-      </button>
-    </section>
-    
-    <section class="grid md:grid-cols-2 gap-8">
-      <div class="bg-white p-6 rounded-xl shadow-sm">
-        <h3 class="font-semibold text-lg mb-2">Feature One</h3>
-        <p class="text-gray-600">Description of your first feature goes here.</p>
-      </div>
-      <div class="bg-white p-6 rounded-xl shadow-sm">
-        <h3 class="font-semibold text-lg mb-2">Feature Two</h3>
-        <p class="text-gray-600">Description of your second feature goes here.</p>
-      </div>
-    </section>
-  </main>
-</body>
-</html>`;
+  const handleCopy = () => {
+    if (generatedCode) {
+      navigator.clipboard.writeText(generatedCode);
+      setCopied(true);
+      toast.success("Code copied to clipboard!");
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -197,6 +248,19 @@ const UploadPage = () => {
                 )}
               </div>
 
+              {/* Refinement Input */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Refinement Instructions (optional)
+                </label>
+                <textarea
+                  value={refinementPrompt}
+                  onChange={(e) => setRefinementPrompt(e.target.value)}
+                  placeholder="E.g., 'Use a dark theme', 'Make it look more professional', 'Add more padding'"
+                  className="w-full h-20 px-4 py-3 rounded-xl border border-border bg-background resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+
               {/* Generate Button */}
               <Button
                 onClick={handleGenerate}
@@ -207,6 +271,11 @@ const UploadPage = () => {
                   <>
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                     AI is analyzing your sketch...
+                  </>
+                ) : generatedCode ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 mr-2" />
+                    Regenerate Code
                   </>
                 ) : (
                   <>
@@ -225,12 +294,19 @@ const UploadPage = () => {
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={() => {
-                      navigator.clipboard.writeText(generatedCode);
-                      toast.success("Code copied to clipboard!");
-                    }}
+                    onClick={handleCopy}
                   >
-                    Copy Code
+                    {copied ? (
+                      <>
+                        <Check className="w-4 h-4 mr-2" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy Code
+                      </>
+                    )}
                   </Button>
                 )}
               </div>
@@ -238,7 +314,7 @@ const UploadPage = () => {
               {/* Code Preview */}
               <div className="bg-foreground/5 rounded-2xl border border-border overflow-hidden">
                 {generatedCode ? (
-                  <div className="max-h-[500px] overflow-auto">
+                  <div className="max-h-[300px] overflow-auto">
                     <pre className="p-4 text-xs font-mono overflow-x-auto">
                       <code className="text-muted-foreground">{generatedCode}</code>
                     </pre>
