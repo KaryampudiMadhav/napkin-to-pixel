@@ -5,7 +5,6 @@ import Features from "@/components/landing/Features";
 import HowItWorks from "@/components/landing/HowItWorks";
 import TechStack from "@/components/landing/TechStack";
 import Architecture from "@/components/landing/Architecture";
-import Team from "@/components/landing/Team";
 import CTA from "@/components/landing/CTA";
 import Footer from "@/components/landing/Footer";
 
@@ -20,7 +19,6 @@ const Index = () => {
         <HowItWorks />
         <TechStack />
         <Architecture />
-        <Team />
         <CTA />
       </main>
       <Footer />
